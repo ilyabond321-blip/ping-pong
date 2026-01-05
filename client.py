@@ -12,7 +12,7 @@ clock = time.Clock()
 display.set_caption("Пінг-Понг")
  
 # --- ЗОБРАЖЕННЯ ---
-background = image.load("background.png")
+background = image.load("images/background.png")
 background = transform.scale(background, (WIDTH, HEIGHT))
 
 # затемнення для кращої видимості
