@@ -1,42 +1,39 @@
-from pygame import *         # Усі модулі pygame
-import socket                # Для підключення до сервера
-import json                  # Для розбору JSON-даних від сервера
-from threading import Thread # Потік для прийому даних паралельно з грою
- 
-# --- PYGAME НАЛАШТУВАННЯ ---
+from pygame import *
+import socket
+import json
+from threading import Thread
+
 WIDTH, HEIGHT = 800, 600
- 
+
 init()
 screen = display.set_mode((WIDTH, HEIGHT))
 clock = time.Clock()
 display.set_caption("Пінг-Понг")
- 
-# --- ЗОБРАЖЕННЯ ---
-background = image.load("images/background.png")
+
+background = image.load("пинг фон.png")
 background = transform.scale(background, (WIDTH, HEIGHT))
 
-# затемнення для кращої видимості
 overlay = Surface((WIDTH, HEIGHT))
 overlay.set_alpha(120)
 overlay.fill((0, 0, 0))
- 
-# --- СЕРВЕР ---
+
+font_big = font.Font(None, 72)
+font_main = font.Font(None, 36)
+
 def connect_to_server():
     while True:
         try:
             client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             client.connect(('localhost', 8080))
- 
-            buffer = ""
-            game_state = {}
             my_id = int(client.recv(24).decode())
-            return my_id, game_state, buffer, client
+            return my_id, client
         except:
             pass
- 
+
 def receive():
-    global buffer, game_state, game_over
-    while not game_over:
+    global game_state
+    buffer = ""
+    while True:
         try:
             data = client.recv(1024).decode()
             buffer += data
@@ -45,88 +42,45 @@ def receive():
                 if packet.strip():
                     game_state = json.loads(packet)
         except:
-            game_state["winner"] = -1
             break
- 
-# --- ШРИФТИ ---
-font_win = font.Font(None, 72)
-font_main = font.Font(None, 36)
- 
-# --- ГРА ---
-game_over = False
-winner = None
-you_winner = None
- 
-my_id, game_state, buffer, client = connect_to_server()
+
+my_id, client = connect_to_server()
+game_state = {}
+
 Thread(target=receive, daemon=True).start()
- 
-# --- ГОЛОВНИЙ ЦИКЛ ---
+
 while True:
     for e in event.get():
         if e.type == QUIT:
             exit()
- 
-    # --- ВІДЛІК ---
-    if "countdown" in game_state and game_state["countdown"] > 0:
-        screen.blit(background, (0, 0))
-        screen.blit(overlay, (0, 0))
 
-        countdown_text = font_win.render(
-            str(game_state["countdown"]), True, (255, 255, 255)
-        )
-        screen.blit(countdown_text, countdown_text.get_rect(center=(WIDTH//2, HEIGHT//2)))
-        display.update()
-        continue
- 
-    # --- ЕКРАН ПЕРЕМОГИ ---
-    if "winner" in game_state and game_state["winner"] is not None:
-        screen.blit(background, (0, 0))
-        screen.blit(overlay, (0, 0))
- 
-        if you_winner is None:
-            you_winner = (game_state["winner"] == my_id)
- 
-        text = "Ти переміг!" if you_winner else "Пощастить наступного разу!"
-        win_text = font_win.render(text, True, (255, 215, 0))
-        screen.blit(win_text, win_text.get_rect(center=(WIDTH//2, HEIGHT//2)))
- 
-        restart_text = font_main.render("К - рестарт", True, (255, 215, 0))
-        screen.blit(restart_text, restart_text.get_rect(center=(WIDTH//2, HEIGHT//2 + 100)))
- 
-        display.update()
-        continue
- 
-    # --- ГРА ---
-    if game_state:
-        screen.blit(background, (0, 0))
-        screen.blit(overlay, (0, 0))
- 
-        draw.rect(screen, (0, 255, 0),
-                  (20, game_state['paddles']['0'], 20, 100))
- 
-        draw.rect(screen, (255, 0, 255),
-                  (WIDTH - 40, game_state['paddles']['1'], 20, 100))
- 
-        draw.circle(screen, (255, 255, 255),
-                    (game_state['ball']['x'], game_state['ball']['y']), 10)
- 
-        score_text = font_main.render(
-            f"{game_state['scores'][0]} : {game_state['scores'][1]}",
-            True, (255, 255, 255)
-        )
-        screen.blit(score_text, (WIDTH//2 - 25, 20))
- 
-    else:
-        screen.blit(background, (0, 0))
-        screen.blit(overlay, (0, 0))
-        waiting_text = font_main.render(
-            "Очікування гравців...", True, (255, 255, 255)
-        )
-        screen.blit(waiting_text, waiting_text.get_rect(center=(WIDTH//2, 50)))
- 
+    screen.blit(background, (0, 0))
+    screen.blit(overlay, (0, 0))
+
+    if "event_countdown" in game_state and game_state["event_countdown"] > 0:
+        t = font_big.render(str(game_state["event_countdown"]), True, (255, 255, 0))
+        screen.blit(t, t.get_rect(center=(WIDTH//2, HEIGHT//2)))
+
+    elif "event_timer" in game_state:
+        timer = font_main.render(f"Подія через: {game_state['event_timer']}", True, (255,255,255))
+        screen.blit(timer, (WIDTH//2 - 80, 50))
+
+    if "current_event" in game_state and game_state["current_event"]:
+        if game_state["current_event"] == 1:
+            txt = "⚡ М'яч прискорено!"
+        else:
+            txt = "🟢 Платформи швидше!"
+        t = font_main.render(txt, True, (0,255,0))
+        screen.blit(t, (WIDTH//2 - 120, 80))
+
+    if "paddles" in game_state:
+        draw.rect(screen, (0,255,0),(20, game_state['paddles']['0'],20,100))
+        draw.rect(screen, (255,0,255),(WIDTH-40, game_state['paddles']['1'],20,100))
+        draw.circle(screen, (255,255,255),(int(game_state['ball']['x']), int(game_state['ball']['y'])),10)
+
     display.update()
     clock.tick(60)
- 
+
     keys = key.get_pressed()
     if keys[K_w]:
         client.send(b"UP")
