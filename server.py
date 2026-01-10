@@ -6,7 +6,7 @@ import random
 
 WIDTH, HEIGHT = 800, 600
 BALL_SPEED = 5
-PADDLE_SPEED = 10
+BASE_PADDLE_SPEED = 10
 COUNTDOWN_START = 3
 
 class GameServer:
@@ -35,6 +35,13 @@ class GameServer:
         self.game_over = False
         self.winner = None
 
+        # --- EVENTS ---
+        self.event_timer = 10
+        self.event_countdown = 0
+        self.current_event = None
+        self.ball_speed_multiplier = 1
+        self.paddle_speed = BASE_PADDLE_SPEED
+
     def handle_client(self, pid):
         conn = self.clients[pid]
         try:
@@ -42,14 +49,14 @@ class GameServer:
                 data = conn.recv(64).decode()
                 with self.lock:
                     if data == "UP":
-                        self.paddles[pid] = max(60, self.paddles[pid] - PADDLE_SPEED)
+                        self.paddles[pid] = max(60, self.paddles[pid] - self.paddle_speed)
                     elif data == "DOWN":
-                        self.paddles[pid] = min(HEIGHT - 100, self.paddles[pid] + PADDLE_SPEED)
+                        self.paddles[pid] = min(HEIGHT - 100, self.paddles[pid] + self.paddle_speed)
         except:
             with self.lock:
                 self.connected[pid] = False
                 self.game_over = True
-                self.winner = 1 - pid  # інший гравець автоматично виграє
+                self.winner = 1 - pid
                 print(f"Гравець {pid} відключився. Переміг гравець {1 - pid}.")
 
     def broadcast_state(self):
@@ -59,8 +66,13 @@ class GameServer:
             "scores": self.scores,
             "countdown": max(self.countdown, 0),
             "winner": self.winner if self.game_over else None,
-            "sound_event": self.sound_event
+            "sound_event": self.sound_event,
+
+            "event_timer": self.event_timer,
+            "event_countdown": self.event_countdown,
+            "current_event": self.current_event
         }) + "\n"
+
         for pid, conn in self.clients.items():
             if conn:
                 try:
@@ -75,19 +87,42 @@ class GameServer:
                 self.countdown -= 1
                 self.broadcast_state()
 
+        last_time = time.time()
+
         while not self.game_over:
             with self.lock:
-                self.ball['x'] += self.ball['vx']
-                self.ball['y'] += self.ball['vy']
+
+                # --- EVENT TIMER ---
+                now = time.time()
+                if now - last_time >= 1:
+                    last_time = now
+
+                    if self.event_countdown > 0:
+                        self.event_countdown -= 1
+                    else:
+                        self.event_timer -= 1
+
+                        if self.event_timer <= 0:
+                            self.event_countdown = 3
+                            self.event_timer = 10
+                            self.current_event = random.choice([1, 2])
+
+                            if self.current_event == 1:
+                                self.ball_speed_multiplier = 1.5
+
+                            if self.current_event == 2:
+                                self.paddle_speed += 3
+
+                # --- BALL MOVE ---
+                self.ball['x'] += self.ball['vx'] * self.ball_speed_multiplier
+                self.ball['y'] += self.ball['vy'] * self.ball_speed_multiplier
 
                 if self.ball['y'] <= 60 or self.ball['y'] >= HEIGHT:
                     self.ball['vy'] *= -1
-                    self.sound_event = "wall_hit"
 
                 if (self.ball['x'] <= 40 and self.paddles[0] <= self.ball['y'] <= self.paddles[0] + 100) or \
                    (self.ball['x'] >= WIDTH - 40 and self.paddles[1] <= self.ball['y'] <= self.paddles[1] + 100):
                     self.ball['vx'] *= -1
-                    self.sound_event = 'platform_hit'
 
                 if self.ball['x'] < 0:
                     self.scores[1] += 1
@@ -104,7 +139,6 @@ class GameServer:
                     self.winner = 1
 
                 self.broadcast_state()
-                self.sound_event = None
             time.sleep(0.016)
 
     def reset_ball(self):
@@ -114,6 +148,8 @@ class GameServer:
             "vx": BALL_SPEED * random.choice([-1, 1]),
             "vy": BALL_SPEED * random.choice([-1, 1])
         }
+        self.ball_speed_multiplier = 1
+        self.current_event = None
 
     def accept_players(self):
         for pid in [0, 1]:
@@ -137,7 +173,6 @@ class GameServer:
             print(f"Гравець {self.winner} переміг!")
             time.sleep(5)
 
-            # Закриваємо старі з'єднання
             for pid in [0, 1]:
                 try:
                     self.clients[pid].close()
