@@ -23,6 +23,7 @@ class GameServer:
         self.sound_event = None
 
     def reset_game_state(self):
+        self.invisible_paddles_timer = 0
         self.paddles = {0: 250, 1: 250}
         self.scores = [0, 0]
         self.ball = {
@@ -66,12 +67,13 @@ class GameServer:
             "scores": self.scores,
             "countdown": max(self.countdown, 0),
             "winner": self.winner if self.game_over else None,
-            "sound_event": self.sound_event,
 
             "event_timer": self.event_timer,
             "event_countdown": self.event_countdown,
-            "current_event": self.current_event
+            "current_event": self.current_event,
+            "invisible_paddles": self.invisible_paddles_timer > 0
         }) + "\n"
+
 
         for pid, conn in self.clients.items():
             if conn:
@@ -92,26 +94,38 @@ class GameServer:
         while not self.game_over:
             with self.lock:
 
-                # --- EVENT TIMER ---
+                # --- EVENT TIMER (1 раз на секунду) ---
                 now = time.time()
                 if now - last_time >= 1:
                     last_time = now
 
+                    # countdown перед івентом
                     if self.event_countdown > 0:
                         self.event_countdown -= 1
+
                     else:
                         self.event_timer -= 1
 
                         if self.event_timer <= 0:
                             self.event_countdown = 3
                             self.event_timer = 10
-                            self.current_event = random.choice([1, 2])
+                            self.current_event = random.choice([1, 2, 3])
 
+                            # ⚡ М'яч швидший
                             if self.current_event == 1:
                                 self.ball_speed_multiplier = 1.5
 
-                            if self.current_event == 2:
+                            # 🟢 Платформи швидші
+                            elif self.current_event == 2:
                                 self.paddle_speed += 3
+
+                            # 👻 НЕВИДИМІ ПЛАТФОРМИ
+                            elif self.current_event == 3:
+                                self.invisible_paddles_timer = 10
+
+                    # зменшуємо таймер невидимості
+                    if self.invisible_paddles_timer > 0:
+                        self.invisible_paddles_timer -= 1
 
                 # --- BALL MOVE ---
                 self.ball['x'] += self.ball['vx'] * self.ball_speed_multiplier
@@ -139,7 +153,9 @@ class GameServer:
                     self.winner = 1
 
                 self.broadcast_state()
+
             time.sleep(0.016)
+
 
     def reset_ball(self):
         self.ball = {
