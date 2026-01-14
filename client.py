@@ -3,30 +3,37 @@ import socket
 import json
 from threading import Thread
 
+# -------------------- НАЛАШТУВАННЯ --------------------
 WIDTH, HEIGHT = 800, 600
+PADDLE_W, PADDLE_H = 20, 100
 
+# -------------------- PYGAME INIT --------------------
 init()
 screen = display.set_mode((WIDTH, HEIGHT))
+display.set_caption("Ping Pong")
 clock = time.Clock()
-display.set_caption("Пінг-Понг")
 
-background = image.load("пинг фон.png")
-background = transform.scale(background, (WIDTH, HEIGHT))
+# -------------------- СПРАЙТИ ПЛАТФОРМ --------------------
+# sprite sheet: 40x100 (2 кадри по 20x100)
 
-overlay = Surface((WIDTH, HEIGHT))
-overlay.set_alpha(120)
-overlay.fill((0, 0, 0))
+blue_sheet = image.load("blue_paddle.png").convert_alpha()
+red_sheet = image.load("red_paddle.png").convert_alpha()
 
-font_big = font.Font(None, 72)
-font_main = font.Font(None, 36)
+# вирізання кадрів
+blue_visible = blue_sheet.subsurface((0, 0, PADDLE_W, PADDLE_H))
+blue_black   = blue_sheet.subsurface((PADDLE_W, 0, PADDLE_W, PADDLE_H))
 
+red_visible  = red_sheet.subsurface((0, 0, PADDLE_W, PADDLE_H))
+red_black    = red_sheet.subsurface((PADDLE_W, 0, PADDLE_W, PADDLE_H))
+
+# -------------------- МЕРЕЖА --------------------
 def connect_to_server():
     while True:
         try:
             client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            client.connect(('localhost', 8080))
-            my_id = int(client.recv(24).decode())
-            return my_id, client
+            client.connect(("localhost", 8080))
+            pid = int(client.recv(32).decode())
+            return pid, client
         except:
             pass
 
@@ -44,46 +51,53 @@ def receive():
         except:
             break
 
-my_id, client = connect_to_server()
+player_id, client = connect_to_server()
 game_state = {}
 
 Thread(target=receive, daemon=True).start()
 
-while True:
+# -------------------- ГОЛОВНИЙ ЦИКЛ --------------------
+running = True
+while running:
     for e in event.get():
         if e.type == QUIT:
-            exit()
+            running = False
 
-    screen.blit(background, (0, 0))
-    screen.blit(overlay, (0, 0))
+    screen.fill((0, 0, 0))
 
-    if "event_countdown" in game_state and game_state["event_countdown"] > 0:
-        t = font_big.render(str(game_state["event_countdown"]), True, (255, 255, 0))
-        screen.blit(t, t.get_rect(center=(WIDTH//2, HEIGHT//2)))
+    if "paddles" in game_state and "ball" in game_state:
 
-    elif "event_timer" in game_state:
-        timer = font_main.render(f"Подія через: {game_state['event_timer']}", True, (255,255,255))
-        screen.blit(timer, (WIDTH//2 - 80, 50))
-
-    if "current_event" in game_state and game_state["current_event"]:
-        if game_state["current_event"] == 1:
-            txt = "⚡ М'яч прискорено!"
+        # вибір кадру
+        if game_state.get("invisible_paddles"):
+            left_img = blue_black
+            right_img = red_black
         else:
-            txt = "🟢 Платформи швидше!"
-        t = font_main.render(txt, True, (0,255,0))
-        screen.blit(t, (WIDTH//2 - 120, 80))
+            left_img = blue_visible
+            right_img = red_visible
 
-    if "paddles" in game_state:
-        draw.rect(screen, (0,255,0),(20, game_state['paddles']['0'],20,100))
-        draw.rect(screen, (255,0,255),(WIDTH-40, game_state['paddles']['1'],20,100))
-        draw.circle(screen, (255,255,255),(int(game_state['ball']['x']), int(game_state['ball']['y'])),10)
+        # платформи
+        screen.blit(left_img, (20, game_state["paddles"]["0"]))
+        screen.blit(right_img, (WIDTH - 40, game_state["paddles"]["1"]))
+
+        # м'яч
+        draw.circle(
+            screen,
+            (255, 255, 255),
+            (int(game_state["ball"]["x"]), int(game_state["ball"]["y"])),
+            10
+        )
 
     display.update()
     clock.tick(60)
 
+    # керування (один клієнт = ліва платформа)
     keys = key.get_pressed()
     if keys[K_w]:
         client.send(b"UP")
     elif keys[K_s]:
         client.send(b"DOWN")
+
+quit()
+
+
 
