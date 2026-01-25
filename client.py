@@ -10,14 +10,14 @@ PADDLE_W, PADDLE_H = 20, 100
 # -------------------- PYGAME INIT --------------------
 init()
 screen = display.set_mode((WIDTH, HEIGHT))
-display.set_caption("Ping Pong")
+display.set_caption("фон.png")
 clock = time.Clock()
 
 # -------------------- СПРАЙТИ ПЛАТФОРМ --------------------
 # sprite sheet: 40x100 (2 кадри по 20x100)
 
-blue_sheet = image.load("blue_paddle.png").convert_alpha()
-red_sheet = image.load("red_paddle.png").convert_alpha()
+blue_sheet = image.load("platform1.png").convert_alpha()
+red_sheet = image.load("platform2.png").convert_alpha()
 
 # вирізання кадрів
 blue_visible = blue_sheet.subsurface((0, 0, PADDLE_W, PADDLE_H))
@@ -98,6 +98,7 @@ while running:
         client.send(b"DOWN")
 
 quit()
+
 
 
 
